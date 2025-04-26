@@ -17,7 +17,7 @@ A comprehensive tool for analyzing the financial viability of solar panel and ba
 - Python 3.8 or higher
 - Required Python packages (see `requirements.txt`)
 - NREL PVWatts API key (for solar data)
-- Electricity usage data in CSV format
+- Synergy electricity account (for usage data)
 
 ## Installation
 
@@ -37,22 +37,45 @@ pip install -r requirements.txt
 PVWATTS_API_KEY=your_api_key_here
 ```
 
-## Usage
+## Getting Started
 
-1. Place your electricity usage data in the `Synergy Data` folder as `HourlyMeterData.csv`
+1. Run the initialization script to set up the required directories:
+```bash
+python initialize.py
+```
 
-2. Run the solar calculator:
+2. Download your Synergy data:
+   - Log in to your Synergy account
+   - Navigate to 'My Usage' or 'Energy Usage'
+   - Select a 12-month period for analysis
+   - Download the data in CSV format
+   - Save as `HourlyMeterData.csv` in the `Synergy Data` folder
+
+3. Run the solar calculator:
 ```bash
 python solar_calculator.py
 ```
 
-3. Follow the prompts to:
+4. Follow the prompts to:
    - Enter system parameters
    - Choose whether to include battery storage
    - Input battery specifications (if applicable)
    - Specify system cost
 
-4. Review the generated analysis and optionally create a Word report
+5. Review the generated analysis and optionally create a Word report
+
+## Required Data Format
+
+Your Synergy data should include:
+- Date and time
+- Energy consumption in kWh
+- Any other relevant meter readings
+
+The data should be in CSV format with the following structure:
+```
+Date,Time,Consumption (kWh)
+YYYY-MM-DD,HH:MM,XX.XX
+```
 
 ## Output
 
@@ -68,6 +91,7 @@ The calculator generates:
 - `Solar_data.py`: Handles solar data retrieval from PVWatts API
 - `generate_solar_report.py`: Creates Word reports with analysis results
 - `convert_to_hourly.py`: Utility for data format conversion
+- `initialize.py`: Sets up required directories and provides data download instructions
 - `requirements.txt`: Python package dependencies
 
 ## Contributing
