@@ -288,7 +288,24 @@ def main():
     Main function to run the solar calculator
     """
     # Get user input
-    params = get_user_input()
+    params = {
+        'system_capacity': float(input("Enter system size (kW): ")),
+        'system_cost': float(input("Enter system cost ($): ")),
+        'tilt': float(input("Enter tilt angle (degrees): ")),
+        'azimuth': float(input("Enter azimuth angle (degrees): ")),
+        'dc_ac_ratio': float(input("Enter DC to AC ratio: ")),
+        'ground_coverage_ratio': float(input("Enter ground coverage ratio: ")),
+        'dc_capacity_factor': float(input("Enter DC capacity factor (%): ")),
+        'include_battery': input("Include battery? (y/n): ").lower() == 'y'
+    }
+    
+    if params['include_battery']:
+        params.update({
+            'battery_capacity': float(input("Enter battery capacity (kWh): ")),
+            'max_charge_rate': float(input("Enter max charge rate (kW): ")),
+            'max_discharge_rate': float(input("Enter max discharge rate (kW): ")),
+            'round_trip_eff': float(input("Enter round trip efficiency (%): ")) / 100.0
+        })
     
     # Get solar data
     solar_data = get_solar_data(params)
@@ -300,10 +317,6 @@ def main():
     print("\nMonthly Solar Production (kWh):")
     for month, production in monthly_production.items():
         print(f"{month}: {production:.2f}")
-    
-    # Generate report
-    print("\nGenerating Word report...")
-    subprocess.run(["python3", "generate_solar_report.py"])
 
 if __name__ == "__main__":
     main() 
