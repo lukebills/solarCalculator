@@ -329,20 +329,31 @@ def save_to_csv(data, output_path):
     except Exception as e:
         raise RuntimeError(f"Error saving data to CSV: {str(e)}")
 
-def main():
+def main(params=None):
     """
     Main function to run the solar data retrieval process
     
+    Args:
+        params (dict, optional): Dictionary of system parameters. If None, will use default values.
+    
     Process:
-    1. Get system parameters from user
+    1. Use provided parameters or defaults
     2. Fetch data from PVWatts API
     3. Save the data
     4. Print summary statistics
     5. Handle any errors
     """
     try:
-        # Get system parameters from user
-        params = get_user_input()
+        # Use provided parameters or defaults
+        if params is None:
+            params = {
+                'system_capacity': 6.6,
+                'tilt': 31,
+                'azimuth': 6,
+                'dc_ac_ratio': 1.2,
+                'ground_coverage_ratio': 0.4,
+                'dc_capacity_factor': 19.3
+            }
         
         # Fetch data from PVWatts API
         data = fetch_solar_data(params)
