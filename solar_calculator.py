@@ -1,3 +1,22 @@
+"""
+Solar Calculator - A tool for analyzing solar panel and battery system economics
+
+This script calculates the financial viability of installing solar panels and optionally a battery system.
+It uses real electricity usage data and solar production estimates to determine:
+- Energy self-consumption
+- Grid exports and imports
+- Financial savings
+- Payback period
+
+Program Flow:
+1. Generate solar production data using PVWatts API
+2. Load and process electricity usage data
+3. Calculate solar-only scenario (without battery)
+4. Calculate battery scenario (if requested)
+5. Perform financial analysis
+6. Generate reports and visualizations
+"""
+
 import pandas as pd
 import numpy as np
 import subprocess
@@ -6,69 +25,88 @@ from dotenv import load_dotenv
 from pathlib import Path
 import json
 
-# Load environment variables from .env file
+# --- Step 1: Initial Setup ---
+# Load environment variables for API keys and configuration
 load_dotenv()
 
-# --- Step 1: Run Solar_data.py to generate solar_pvwatts_data.csv ---
+# --- Step 2: Generate Solar Data ---
+# Run Solar_data.py to get solar production estimates from PVWatts API
 print("\nRunning Solar_data.py to generate solar PV data...")
-subprocess.run(["python3", "Solar_data.py"])  # Assumes Solar_data.py is in the same directory
+subprocess.run(["python3", "Solar_data.py"])
 
-# --- Step 2: Read the generated solar_pvwatts_data.csv and HourlyMeterData.csv ---
+# --- Step 3: Load and Prepare Data ---
+# Set up directories and file paths
 results_dir = Path("solar_results")
 results_dir.mkdir(exist_ok=True)
 solar_file = results_dir / "solar_pvwatts_data.csv"
 meter_file = "Synergy Data/HourlyMeterData.csv"
 
+# Verify required files exist
 if not os.path.exists(solar_file):
     raise FileNotFoundError(f"{solar_file} not found. Please ensure Solar_data.py ran successfully.")
 if not os.path.exists(meter_file):
     raise FileNotFoundError(f"{meter_file} not found. Please provide your hourly meter data CSV.")
 
+# Load data files
 solar_data = pd.read_csv(solar_file, parse_dates=["datetime"])
 meter_data = pd.read_csv(meter_file)
 
-# --- Step 3: Prepare and merge data on datetime ---
+# --- Step 4: Data Processing ---
+# Convert meter data datetime and standardize column names
 meter_data["datetime"] = pd.to_datetime(meter_data["Date"] + " " + meter_data["Time"], format="%Y-%m-%d %H:%M")
 meter_data = meter_data.rename(columns={"Usage already billed": "usage_kwh"})
+
+# Merge solar and meter data on datetime
 combined = pd.merge(solar_data, meter_data, on="datetime", how="inner")
 
-# --- Step 4: Calculate solar-only scenario (no battery) ---
+# --- Step 5: Solar-Only Scenario Calculations ---
+# Convert AC power to kWh and extract hour for time-based calculations
 combined["solar_kwh"] = combined["ac"] / 1000
-combined["hour"] = combined["datetime"].dt.hour  # Ensure hour column exists
+combined["hour"] = combined["datetime"].dt.hour
 
-# Solar-only scenario
+# Calculate basic solar-only metrics:
+# - Self-consumed: Minimum of solar production and usage
+# - Exported: Excess solar after self-consumption
+# - Imported: Grid power needed when solar is insufficient
 combined["self_consumed_solar_only"] = np.minimum(combined["solar_kwh"], combined["usage_kwh"])
 combined["exported_solar_only"] = np.maximum(combined["solar_kwh"] - combined["usage_kwh"], 0)
 combined["imported_solar_only"] = np.maximum(combined["usage_kwh"] - combined["solar_kwh"], 0)
 
-# --- Step 5: Battery option and full scenario ---
+# --- Step 6: Battery Configuration ---
+# Get battery configuration from user if desired
 use_battery = input("\nWould you like to include a battery? (y/n): ").strip().lower() == 'y'
 if use_battery:
+    # Get battery specifications
     battery_capacity = float(input("Battery capacity (kWh): "))
     max_charge_rate = float(input("Max charge rate (kW): "))
     max_discharge_rate = float(input("Max discharge rate (kW): "))
     round_trip_eff = float(input("Round-trip efficiency (%, e.g. 90): ")) / 100.0
 else:
+    # Set battery parameters to zero if not used
     battery_capacity = 0
     max_charge_rate = 0
     max_discharge_rate = 0
     round_trip_eff = 1.0
 
-# Initialize battery tracking columns
+# --- Step 7: Battery Scenario Calculations ---
+# Initialize columns for battery tracking
 n = len(combined)
-combined["battery_soc"] = 0.0
+combined["battery_soc"] = 0.0  # State of charge
 combined["battery_charge"] = 0.0
 combined["battery_discharge"] = 0.0
 combined["self_consumed"] = 0.0
 combined["exported"] = 0.0
 combined["imported"] = 0.0
 
+# Simulate battery operation hour by hour
 soc = 0.0  # State of charge (kWh)
 for i in range(n):
+    # Get current hour's data
     usage = combined.at[i, "usage_kwh"]
     solar = combined.at[i, "solar_kwh"]
     hour = combined.at[i, "hour"]
-    # 1. Use solar for self-consumption
+    
+    # Step 1: Use solar for immediate consumption
     self_consumed = min(solar, usage)
     remaining_solar = solar - self_consumed
     remaining_usage = usage - self_consumed
@@ -76,28 +114,34 @@ for i in range(n):
     battery_discharge = 0.0
     imported = 0.0
     exported = 0.0
-    # 2. Charge battery with excess solar
+    
+    # Step 2: Charge battery with excess solar
     if use_battery and remaining_solar > 0:
+        # Calculate possible charge based on battery capacity and charge rate
         charge_possible = min(max_charge_rate, battery_capacity - soc)
-        # Account for charging efficiency (only store what can be used after losses)
         charge_energy = min(remaining_solar, charge_possible)
         soc += charge_energy * round_trip_eff
         battery_charge = charge_energy
         remaining_solar -= charge_energy
-    # 3. Export any remaining solar
+    
+    # Step 3: Export any remaining solar to grid
     if remaining_solar > 0:
         exported = remaining_solar
-    # 4. If usage not met, discharge battery
+    
+    # Step 4: Discharge battery if usage not met
     if use_battery and remaining_usage > 0:
+        # Calculate possible discharge based on battery state and discharge rate
         discharge_possible = min(max_discharge_rate, soc)
         discharge_energy = min(remaining_usage, discharge_possible)
         soc -= discharge_energy
         battery_discharge = discharge_energy
         remaining_usage -= discharge_energy
-    # 5. If still not met, import from grid
+    
+    # Step 5: Import from grid if still needed
     if remaining_usage > 0:
         imported = remaining_usage
-    # 6. Track values
+    
+    # Step 6: Record all values
     combined.at[i, "battery_soc"] = soc
     combined.at[i, "battery_charge"] = battery_charge
     combined.at[i, "battery_discharge"] = battery_discharge
@@ -105,18 +149,22 @@ for i in range(n):
     combined.at[i, "exported"] = exported
     combined.at[i, "imported"] = imported
 
-# --- Step 6: Apply rates and calculate costs for both scenarios ---
+# --- Step 8: Financial Analysis ---
+# Define electricity rates and peak hours
 supply_charge_per_day = 1.1322  # $/day
 energy_rate = 0.315823  # $/kWh
 peak_start = 15  # 3pm
 peak_end = 20    # 9pm
+
+# Calculate peak/off-peak rates
 combined["is_peak"] = combined["hour"].between(peak_start, peak_end, inclusive="both")
 combined["feedin_rate"] = np.where(combined["is_peak"], 0.10, 0.02)
 
+# Calculate total days and supply charge
 total_days = combined["datetime"].dt.date.nunique()
 supply_charge_total = supply_charge_per_day * total_days
 
-# Solar-only scenario
+# --- Step 9: Solar-Only Scenario Results ---
 solar_only = {}
 solar_only["total_self_consumed"] = combined["self_consumed_solar_only"].sum()
 solar_only["total_exported"] = combined["exported_solar_only"].sum()
@@ -128,7 +176,7 @@ solar_only["cost_without_solar"] = solar_only["total_usage"] * energy_rate + sup
 solar_only["cost_with_solar"] = solar_only["total_imported"] * energy_rate - solar_only["export_earnings"] + supply_charge_total
 solar_only["total_savings"] = solar_only["cost_without_solar"] - solar_only["cost_with_solar"]
 
-# Battery scenario
+# --- Step 10: Battery Scenario Results ---
 total_self_consumed = combined["self_consumed"].sum()
 total_exported = combined["exported"].sum()
 total_imported = combined["imported"].sum()
@@ -141,10 +189,11 @@ cost_without_solar = total_usage * energy_rate + supply_charge_total
 cost_with_solar = total_imported * energy_rate - export_earnings + supply_charge_total
 total_savings = cost_without_solar - cost_with_solar
 
+# Calculate payback period
 system_cost = float(input("Total system cost ($, e.g. 8000): "))
 payback_years = system_cost / total_savings if total_savings > 0 else float('inf')
 
-# --- Step 7: Print and save summary ---
+# --- Step 11: Display Results ---
 print("\n--- Solar Financial Analysis ---")
 print(f"Total energy used: {total_usage:.2f} kWh")
 print(f"Total solar produced: {total_solar:.2f} kWh")
@@ -162,11 +211,12 @@ print(f"Cost with solar: ${cost_with_solar:,.2f}")
 print(f"Total savings per year: ${total_savings:,.2f}")
 print(f"Estimated payback period: {payback_years:.1f} years")
 
-# Save detailed results
+# --- Step 12: Save Results ---
+# Save detailed hourly data
 output_file = results_dir / 'solar_analysis_results.csv'
 combined.to_csv(output_file, index=False)
 
-# Save summary data for report
+# Save summary data for report generation
 summary_data = {
     "solar_only": solar_only,
     "battery": {
@@ -192,7 +242,7 @@ with open(results_dir / 'solar_summary.json', 'w') as f:
 
 print(f"\nAnalysis complete! Results saved to {output_file}")
 
-# --- Optionally generate Word report ---
+# --- Step 13: Generate Report ---
 generate_report = input("\nWould you like to generate a Word report? (y/n): ").strip().lower() == 'y'
 if generate_report:
     print("Generating Word report...")
@@ -201,6 +251,13 @@ if generate_report:
 def calculate_solar_production(solar_data, params):
     """
     Calculate solar production with the new factors
+    
+    Args:
+        solar_data (dict): Dictionary containing solar radiation data by month
+        params (dict): Dictionary containing system parameters
+        
+    Returns:
+        dict: Monthly solar production in kWh
     """
     # Apply DC to AC ratio to adjust system capacity
     adjusted_capacity = params['system_capacity'] * params['dc_ac_ratio']
@@ -227,6 +284,9 @@ def calculate_solar_production(solar_data, params):
     return monthly_production
 
 def main():
+    """
+    Main function to run the solar calculator
+    """
     # Get user input
     params = get_user_input()
     

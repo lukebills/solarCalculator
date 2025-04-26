@@ -1,3 +1,20 @@
+"""
+Solar Report Generator - Creates a comprehensive Word report with analysis and visualizations
+
+This module generates a professional report that includes:
+- Summary of solar system performance
+- Energy and cost analysis tables
+- Visualizations of energy flows
+- Financial impact analysis
+- Assumptions and considerations
+
+Program Flow:
+1. Load and process analysis results
+2. Generate summary text using GPT
+3. Create visualizations
+4. Generate Word document with tables and graphs
+"""
+
 import pandas as pd
 import matplotlib.pyplot as plt
 from docx import Document
@@ -12,29 +29,36 @@ from dotenv import load_dotenv
 import json
 import re
 
-# --- Load OpenAI API key ---
+# --- Step 1: Environment Setup ---
+# Load OpenAI API key for generating summary text
 load_dotenv()
 openai.api_key = os.getenv("OPENAI_API_KEY")
 
-# --- Read the analysis results ---
+# --- Step 2: Load Analysis Results ---
+# Define paths for results files
 results_dir = "solar_results"
 results_file = os.path.join(results_dir, 'solar_analysis_results.csv')
 summary_file = os.path.join(results_dir, 'solar_summary.json')
+
+# Verify required files exist
 if not os.path.exists(results_file):
     raise FileNotFoundError(f"{results_file} not found. Please run solar_calculator.py first.")
 if not os.path.exists(summary_file):
     raise FileNotFoundError(f"{summary_file} not found. Please run solar_calculator.py first.")
 
+# Load data from files
 df = pd.read_csv(results_file, parse_dates=["datetime"])
 with open(summary_file) as f:
     summary_data = json.load(f)
 
-# --- Prepare summary tables for both scenarios ---
+# --- Step 3: Prepare Summary Tables ---
+# Extract data for both solar-only and battery scenarios
 solar_only = summary_data["solar_only"]
 battery = summary_data["battery"]
 supply_charge_total = summary_data["supply_charge_total"]
 system_cost = summary_data["system_cost"]
 
+# Define table rows for energy metrics
 energy_rows_solar = [
     ("Total energy used (kWh)", f"{solar_only['total_usage']:.2f}"),
     ("Total solar produced (kWh)", f"{solar_only['total_solar']:.2f}"),
@@ -42,6 +66,8 @@ energy_rows_solar = [
     ("Exported to grid (kWh)", f"{solar_only['total_exported']:.2f}"),
     ("Imported from grid (kWh)", f"{solar_only['total_imported']:.2f}"),
 ]
+
+# Define table rows for cost metrics
 cost_rows_solar = [
     ("Annual supply charge ($)", f"{supply_charge_total:,.2f}"),
     ("Total earned from exported electricity ($)", f"{solar_only['export_earnings']:,.2f}"),
@@ -49,6 +75,8 @@ cost_rows_solar = [
     ("Cost with solar ($)", f"{solar_only['cost_with_solar']:,.2f}"),
     ("Total savings per year ($)", f"{solar_only['total_savings']:,.2f}"),
 ]
+
+# Define table rows for battery scenario
 energy_rows_battery = [
     ("Total energy used (kWh)", f"{battery['total_usage']:.2f}"),
     ("Total solar produced (kWh)", f"{battery['total_solar']:.2f}"),
@@ -56,9 +84,13 @@ energy_rows_battery = [
     ("Exported to grid (kWh)", f"{battery['total_exported']:.2f}"),
     ("Imported from grid (kWh)", f"{battery['total_imported']:.2f}"),
 ]
+
+# Add battery-specific metrics if battery is used
 if battery["use_battery"]:
     energy_rows_battery.append(("Total battery charge (kWh)", f"{battery['total_battery_charge']:.2f}"))
     energy_rows_battery.append(("Total battery discharge (kWh)", f"{battery['total_battery_discharge']:.2f}"))
+
+# Define cost rows for battery scenario
 cost_rows_battery = [
     ("Annual supply charge ($)", f"{supply_charge_total:,.2f}"),
     ("Total earned from exported electricity ($)", f"{battery['export_earnings']:,.2f}"),
@@ -68,8 +100,19 @@ cost_rows_battery = [
     ("Estimated payback period (years)", f"{battery['payback_years']:.1f}"),
 ]
 
-# --- GPT-4.1-mini summary and assumptions ---
+# --- Step 4: Generate Summary Text using GPT ---
 def gpt_summary_and_assumptions(solar_only, battery, supply_charge_total):
+    """
+    Generate summary text and assumptions using GPT-4
+    
+    Args:
+        solar_only (dict): Solar-only scenario metrics
+        battery (dict): Battery scenario metrics
+        supply_charge_total (float): Total supply charge
+        
+    Returns:
+        tuple: (summary_json, assumptions_text)
+    """
     # Prepare variables for the prompt
     annual_solar_generation_kWh = battery['total_solar']
     annual_household_consumption_kWh = battery['total_usage']
@@ -91,6 +134,7 @@ def gpt_summary_and_assumptions(solar_only, battery, supply_charge_total):
     annual_savings_with_battery = battery['total_savings']
     payback_period_years = battery['payback_years']
 
+    # Create template for summary paragraphs
     paragraphs = f'''
 Paragraph 1: Solar Production and Basic Usage
 The residential solar installation generates a substantial amount of energy annually, producing {annual_solar_generation_kWh:.2f} kWh of solar power. In the solar-only scenario, of the total {annual_household_consumption_kWh:.2f} kWh energy consumed, only {self_consumed_solar_kWh:.2f} kWh is self-consumed directly from solar, with the remainder exported to the grid at {exported_solar_kWh:.2f} kWh. The household imports {grid_import_kWh:.2f} kWh from the grid.
@@ -108,6 +152,7 @@ Paragraph 5: Final Comparison and Recommendations
 Overall, the solar-only installation already offers significant cost and energy benefits by reducing grid reliance and electricity expenditures. However, adding battery storage maximises self-consumption, minimises grid dependency, and greatly boosts savings, justifying the additional investment over time. Both options contribute toward cleaner energy usage and improved household energy independence. Users should weigh initial costs, potential changes in export tariffs, and energy consumption patterns to decide the optimal system configuration.
 '''
 
+    # Create prompt for GPT
     prompt = f"""
 You are an energy analyst. Using the following summary paragraphs, return a JSON object with the following keys: 'paragraph_1', 'paragraph_2', 'paragraph_3', 'paragraph_4', 'paragraph_5', and 'assumptions'. Each key should contain the corresponding paragraph as a string, with no headings or extra text. Do not include any headings in your response. The JSON should look like: {{"paragraph_1": "...", "paragraph_2": "...", ..., "assumptions": "..."}}.
 
@@ -119,18 +164,21 @@ Also, in the 'assumptions' field, briefly comment on:
 - If the owner has an electric car, this would impact cost savings.
 Encourage the reader to consider other scenarios that may affect the results.
 """
+    # Call GPT API
     response = openai.chat.completions.create(
         model="gpt-4.1-mini",
         messages=[{"role": "user", "content": prompt}],
         max_tokens=700
     )
     text = response.choices[0].message.content.strip()
-    # Remove code block formatting if present
+    
+    # Clean up response
     if text.startswith('```'):
         text = text.strip('`\n')
         if text.startswith('json'):
             text = text[4:].strip()
-    # Try to parse as JSON
+    
+    # Parse JSON response
     try:
         parsed = json.loads(text)
         return parsed, parsed.get("assumptions", "")
@@ -138,13 +186,15 @@ Encourage the reader to consider other scenarios that may affect the results.
         print("[Warning] GPT response was not valid JSON. Using fallback.")
         return {"paragraph_1": text}, ""
 
+# Generate summary text
 summary_json, assumptions_text = gpt_summary_and_assumptions(solar_only, battery, supply_charge_total)
 
-# --- Create plots directory ---
+# --- Step 5: Create Visualizations ---
+# Create directory for plots
 plots_dir = "solar_report_plots"
 os.makedirs(plots_dir, exist_ok=True)
 
-# --- Plot 1: Hourly flows for a sample week ---
+# Plot 1: Hourly energy flows for a sample week
 sample = df.iloc[:168]  # First week
 plt.figure(figsize=(10, 6))
 plt.plot(sample["datetime"], sample["usage_kwh"], label="Usage (kWh)")
@@ -163,7 +213,7 @@ plot1_path = os.path.join(plots_dir, "hourly_flows.png")
 plt.savefig(plot1_path)
 plt.close()
 
-# --- Plot 2: Monthly totals (include battery charge/discharge if present) ---
+# Plot 2: Monthly energy totals
 df["month"] = df["datetime"].dt.month
 gb = df.groupby("month").sum(numeric_only=True)
 plt.figure(figsize=(10, 6))
@@ -182,7 +232,7 @@ plot2_path = os.path.join(plots_dir, "monthly_totals.png")
 plt.savefig(plot2_path)
 plt.close()
 
-# --- Plot 3: Pie chart of energy breakdown (include battery flows if present) ---
+# Plot 3: Annual energy breakdown pie chart
 labels = ["Self-consumed", "Exported", "Imported"]
 values = [battery['total_self_consumed'], battery['total_exported'], battery['total_imported']]
 if battery["use_battery"]:
@@ -196,21 +246,23 @@ plot3_path = os.path.join(plots_dir, "energy_breakdown.png")
 plt.savefig(plot3_path)
 plt.close()
 
-# --- Calculate financial impact for each section in the pie chart ---
+# --- Step 6: Calculate Financial Impact ---
+# Calculate financial impact for each energy component
 energy_rate = 0.315823
-# Self-consumed: value is what would have been paid to the grid
 self_consumed_value = battery['total_self_consumed'] * energy_rate
-# Exported: earnings from feed-in tariff (weighted average)
 exported_value = (df['exported'] * df['feedin_rate']).sum()
-# Imported: cost
 imported_value = battery['total_imported'] * energy_rate
-# Battery charge/discharge: not directly financial, but show kWh
 battery_charge_value = battery['total_battery_charge'] if battery['use_battery'] else 0
 battery_discharge_value = battery['total_battery_discharge'] if battery['use_battery'] else 0
 
-# --- Create Word document ---
+# --- Step 7: Generate Word Document ---
 def set_metric_col_width_and_border(table):
-    # Set first column width and right border
+    """
+    Set consistent column width and border style for tables
+    
+    Args:
+        table: Word document table object
+    """
     for row in table.rows:
         cell = row.cells[0]
         cell.width = Cm(9.45)
@@ -225,21 +277,25 @@ def set_metric_col_width_and_border(table):
         tcBorders.append(right)
         tcPr.append(tcBorders)
 
+# Create report directory
 report_dir = "solar_reports"
 os.makedirs(report_dir, exist_ok=True)
 report_path = os.path.join(report_dir, "solar_system_report.docx")
+
+# Initialize Word document
 doc = Document()
 doc.add_heading("Solar System Financial & Energy Report", 0)
 
+# Add summary section
 doc.add_heading("Summary", level=1)
 for i in range(1, 6):
     para = summary_json.get(f'paragraph_{i}', '').strip()
     if para:
         doc.add_paragraph(para)
-# Add a page break after the summary
 if doc.paragraphs:
     doc.paragraphs[-1].runs[-1].add_break(WD_BREAK.PAGE)
 
+# Add solar-only scenario tables
 doc.add_heading("Energy Summary Table (Solar Only)", level=2)
 table1 = doc.add_table(rows=1, cols=2)
 table1.style = 'Light List Accent 1'
@@ -264,6 +320,7 @@ for k, v in cost_rows_solar:
     row_cells[1].text = v
 set_metric_col_width_and_border(table2)
 
+# Add battery scenario tables
 doc.add_heading("Energy Summary Table (Solar + Battery)", level=2)
 table3 = doc.add_table(rows=1, cols=2)
 table3.style = 'Light List Accent 1'
@@ -288,33 +345,37 @@ for k, v in cost_rows_battery:
     row_cells[1].text = v
 set_metric_col_width_and_border(table4)
 
+# Add assumptions section
 doc.add_heading("Assumptions & Considerations", level=1)
 doc.add_paragraph(assumptions_text)
 
-# --- Landscape section for graphs ---
+# Add landscape section for graphs
 section = doc.add_section(WD_ORIENT.LANDSCAPE)
 section.orientation = WD_ORIENT.LANDSCAPE
 new_width, new_height = section.page_height, section.page_width
 section.page_width = new_width
 section.page_height = new_height
 
+# Add graphs section
 doc.add_heading("Graphs", level=1)
 doc.add_paragraph("Hourly Energy Flows (First Week):")
 pic1 = doc.add_picture(plot1_path, width=Inches(9))
 last_paragraph = doc.paragraphs[-1]
 last_paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
 doc.paragraphs[-1].runs[-1].add_break(WD_BREAK.PAGE)
+
 doc.add_paragraph("Monthly Energy Totals:")
 pic2 = doc.add_picture(plot2_path, width=Inches(9))
 last_paragraph = doc.paragraphs[-1]
 last_paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
 doc.paragraphs[-1].runs[-1].add_break(WD_BREAK.PAGE)
+
 doc.add_paragraph("Annual Energy Breakdown:")
-pic3 = doc.add_picture(plot3_path, width=Inches(6.3))  # 10% smaller
+pic3 = doc.add_picture(plot3_path, width=Inches(6.3))
 last_paragraph = doc.paragraphs[-1]
 last_paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
 
-# Add table for financial impact of each section in the pie chart
+# Add financial impact table
 doc.add_paragraph("Annual Energy Breakdown: Financial Impact")
 impact_table = doc.add_table(rows=1, cols=3)
 impact_table.style = 'Light List Accent 1'
@@ -336,7 +397,9 @@ for row in impact_rows:
     cells[2].text = row[2]
 set_metric_col_width_and_border(impact_table)
 
+# Add footer
 doc.add_paragraph("\nReport generated automatically.")
 
+# Save document
 doc.save(report_path)
 print(f"\nReport generated: {report_path}") 
