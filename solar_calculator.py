@@ -307,10 +307,46 @@ def display_system_summary(params):
         print("└───────────────────────────────┴──────────────┘")
         print(f"\nTotal System Cost: ${params['system_cost']:,.2f}")
 
+def check_existing_files():
+    """
+    Check for existing output files and ask for confirmation before proceeding
+    
+    Returns:
+        bool: True if user confirms to proceed, False otherwise
+    """
+    # List of files that will be overwritten
+    files_to_check = [
+        "solar_results/solar_analysis_results.csv",
+        "solar_results/solar_summary.json",
+        "solar_results/solar_pvwatts_data.csv",
+        "reports/solar_analysis_report.docx",
+        "reports/plot1.png",
+        "reports/plot2.png",
+        "reports/plot3.png"
+    ]
+    
+    # Check which files exist
+    existing_files = [f for f in files_to_check if os.path.exists(f)]
+    
+    if existing_files:
+        print("\n⚠️ Warning: The following files will be overwritten:")
+        for file in existing_files:
+            print(f"  - {file}")
+        
+        response = input("\nDo you want to proceed? (y/n): ").lower()
+        return response == 'y'
+    
+    return True
+
 def main():
     """
     Main function to run the solar calculator
     """
+    # Check for existing files and get confirmation
+    if not check_existing_files():
+        print("Operation cancelled by user.")
+        return
+    
     # Get user input
     params = {
         'system_capacity': float(input("Enter system size (kW): ")),
