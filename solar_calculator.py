@@ -283,6 +283,37 @@ def calculate_solar_production(solar_data, params):
     
     return monthly_production
 
+def display_system_summary(params):
+    """
+    Display a summary table of the solar system configuration
+    
+    Args:
+        params (dict): Dictionary containing system parameters
+    """
+    print("\n=== System Configuration Summary ===")
+    print("┌───────────────────────────────┬──────────────┐")
+    print("│ Parameter                     │ Value        │")
+    print("├───────────────────────────────┼──────────────┤")
+    print(f"│ System Size                  │ {params['system_capacity']:6.1f} kW    │")
+    print(f"│ System Cost                  │ ${params['system_cost']:8,.2f}  │")
+    print(f"│ Tilt Angle                   │ {params['tilt']:6.1f}°     │")
+    print(f"│ Azimuth Angle                │ {params['azimuth']:6.1f}°     │")
+    print(f"│ DC to AC Ratio               │ {params['dc_ac_ratio']:6.2f}      │")
+    print(f"│ Ground Coverage Ratio        │ {params['ground_coverage_ratio']:6.2f}      │")
+    print(f"│ DC Capacity Factor           │ {params['dc_capacity_factor']:6.1f}%    │")
+    
+    if params['include_battery']:
+        print("├───────────────────────────────┼──────────────┤")
+        print(f"│ Battery Capacity             │ {params['battery_capacity']:6.1f} kWh  │")
+        print(f"│ Max Charge Rate              │ {params['max_charge_rate']:6.1f} kW   │")
+        print(f"│ Max Discharge Rate           │ {params['max_discharge_rate']:6.1f} kW   │")
+        print(f"│ Round Trip Efficiency        │ {params['round_trip_eff']*100:6.1f}%    │")
+        print("└───────────────────────────────┴──────────────┘")
+        print(f"\nTotal System Cost (Solar + Battery): ${params['system_cost']:,.2f}")
+    else:
+        print("└───────────────────────────────┴──────────────┘")
+        print(f"\nTotal System Cost: ${params['system_cost']:,.2f}")
+
 def main():
     """
     Main function to run the solar calculator
@@ -306,6 +337,9 @@ def main():
             'max_discharge_rate': float(input("Enter max discharge rate (kW): ")),
             'round_trip_eff': float(input("Enter round trip efficiency (%): ")) / 100.0
         })
+    
+    # Display system configuration summary
+    display_system_summary(params)
     
     # Get solar data
     solar_data = get_solar_data(params)
