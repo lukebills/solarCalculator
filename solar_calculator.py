@@ -347,7 +347,7 @@ def main():
         print("Operation cancelled by user.")
         return
     
-    # Get user input
+    # Get user input for system configuration
     params = {
         'system_capacity': float(input("Enter system size (kW): ")),
         'system_cost': float(input("Enter system cost ($): ")),
@@ -371,7 +371,7 @@ def main():
     # Display system configuration summary
     display_system_summary(params)
     
-    # Get solar data
+    # Get solar data using the same parameters
     solar_data = get_solar_data(params)
     
     # Calculate production with new factors

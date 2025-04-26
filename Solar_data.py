@@ -23,6 +23,7 @@ from dotenv import load_dotenv
 import pandas as pd
 import json
 from datetime import datetime
+import sys
 
 # --- Step 1: Environment Setup ---
 # Load environment variables from .env file
@@ -243,9 +244,9 @@ def fetch_solar_data(params):
         'api_key': API_KEY,
         'format': 'json',
         'system_capacity': params['system_capacity'],
-        'module_type': params['module_type'],
-        'losses': params['losses'],
-        'array_type': params['array_type'],
+        'module_type': 0,  # Standard module type
+        'losses': 14,      # Default system losses
+        'array_type': 0,   # Fixed open rack
         'tilt': params['tilt'],
         'azimuth': params['azimuth'],
         'lat': PERTH_LATITUDE,
@@ -267,23 +268,14 @@ def fetch_solar_data(params):
         # Save the API response for debugging
         save_api_response(data, request_params)
         
-        # Check for API errors
-        if "errors" in data and data["errors"]:
-            raise RuntimeError(f"PVWatts API errors: {data['errors']}")
-            
-        # Validate response structure
-        if "outputs" not in data:
-            raise RuntimeError("No 'outputs' field in API response")
-            
-        if "ac" not in data["outputs"]:
-            raise RuntimeError("No 'ac' data in API response outputs")
-            
         return data
         
     except requests.exceptions.RequestException as e:
-        raise RuntimeError(f"Error fetching PVWatts data: {str(e)}")
+        raise RuntimeError(f"API request failed: {str(e)}")
     except json.JSONDecodeError as e:
-        raise RuntimeError(f"Error parsing API response: {str(e)}")
+        raise RuntimeError(f"Invalid JSON response: {str(e)}")
+    except Exception as e:
+        raise RuntimeError(f"Unexpected error: {str(e)}")
 
 def save_to_csv(data, output_path):
     """
@@ -363,20 +355,13 @@ def main():
         
         # Print summary statistics
         print("\nSummary Statistics:")
-        print(f"Annual AC Energy: {data['outputs']['ac_annual']:.2f} kWh")
-        print(f"Annual Solar Radiation: {data['outputs']['solrad_annual']:.2f} kWh/m²/day")
-        print(f"Capacity Factor: {data['outputs']['capacity_factor']:.2f}%")
+        print(f"System Size: {params['system_capacity']} kW")
+        print(f"Tilt Angle: {params['tilt']}°")
+        print(f"Azimuth Angle: {params['azimuth']}°")
         
-        # Print monthly statistics
-        print("\nMonthly AC Energy Production (kWh):")
-        for i, monthly_ac in enumerate(data['outputs']['ac_monthly'], 1):
-            print(f"Month {i}: {monthly_ac:.2f}")
-            
     except Exception as e:
-        print(f"\nError: {str(e)}")
-        print("\nDebug information:")
-        print(f"Parameters used: {params}")
-        raise
+        print(f"\n❌ Error: {str(e)}")
+        sys.exit(1)
 
 if __name__ == '__main__':
     main()
