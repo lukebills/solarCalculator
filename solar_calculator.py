@@ -296,18 +296,11 @@ def display_system_summary(params):
     print("├───────────────────────────────┼──────────────┤")
     print(f"│ System Size                  │ {params['system_capacity']:6.1f} kW    │")
     print(f"│ System Cost                  │ ${params['system_cost']:8,.2f}  │")
-    print(f"│ Tilt Angle                   │ {params['tilt']:6.1f}°     │")
-    print(f"│ Azimuth Angle                │ {params['azimuth']:6.1f}°     │")
-    print(f"│ DC to AC Ratio               │ {params['dc_ac_ratio']:6.2f}      │")
-    print(f"│ Ground Coverage Ratio        │ {params['ground_coverage_ratio']:6.2f}      │")
-    print(f"│ DC Capacity Factor           │ {params['dc_capacity_factor']:6.1f}%    │")
+    print(f"│ Location                     │ {params['location']:14} │")
     
     if params['include_battery']:
         print("├───────────────────────────────┼──────────────┤")
         print(f"│ Battery Capacity             │ {params['battery_capacity']:6.1f} kWh  │")
-        print(f"│ Max Charge Rate              │ {params['max_charge_rate']:6.1f} kW   │")
-        print(f"│ Max Discharge Rate           │ {params['max_discharge_rate']:6.1f} kW   │")
-        print(f"│ Round Trip Efficiency        │ {params['round_trip_eff']*100:6.1f}%    │")
         print("└───────────────────────────────┴──────────────┘")
         print(f"\nTotal System Cost (Solar + Battery): ${params['system_cost']:,.2f}")
     else:
@@ -322,6 +315,7 @@ def main():
     params = {
         'system_capacity': float(input("Enter system size (kW): ")),
         'system_cost': float(input("Enter system cost ($): ")),
+        'location': input("Enter suburb: "),
         'tilt': float(input("Enter tilt angle (degrees): ")),
         'azimuth': float(input("Enter azimuth angle (degrees): ")),
         'dc_ac_ratio': float(input("Enter DC to AC ratio: ")),
